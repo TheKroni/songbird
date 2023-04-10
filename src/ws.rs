@@ -14,7 +14,7 @@ use tokio_tungstenite::{
     MaybeTlsStream,
     WebSocketStream,
 };
-use tracing::instrument;
+use tracing::{instrument, debug};
 use url::Url;
 
 pub struct WsStream(WebSocketStream<MaybeTlsStream<TcpStream>>);
@@ -91,8 +91,16 @@ impl From<TungsteniteError> for Error {
 #[inline]
 pub(crate) fn convert_ws_message(message: Option<Message>) -> Result<Option<Event>> {
     Ok(match message {
-        Some(Message::Text(mut payload)) =>
-            crate::json::from_str(payload.as_mut_str()).map(Some)?,
+        Some(Message::Text(mut payload)) => match crate::json::from_str(payload.as_mut_str()) {
+            Ok(event) => Some(event),
+            Err(why) => {
+                debug!(
+                    "Could not deserialize websocket event, payload: {}, error: {}",
+                    payload, why
+                );
+                None
+            },
+        },
         Some(Message::Binary(bytes)) => {
             return Err(Error::UnexpectedBinaryMessage(bytes));
         },
